@@ -2,8 +2,8 @@
  * Kilo Provider Extension for Pi Agent
  */
 
-import type { OAuthCredentials, OAuthLoginCallbacks } from "@mariozechner/pi-ai";
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { Api, Model, OAuthCredentials, OAuthLoginCallbacks } from "@mariozechner/pi-ai";
+import type { ExtensionAPI, ProviderModelConfig } from "@mariozechner/pi-coding-agent";
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -31,11 +31,9 @@ function fetchModels(token: string) {
     return (data.data || []).map((m: any) => ({
       id: m.id,
       name: m.name,
-      provider: "kilo",
-      api: "openai-completions",
+      api: "openai-completions" as Api,
       reasoning: m.reasoning || false,
       input: m.modalities?.input || ["text"],
-      output: m.modalities?.output || ["text"],
       cost: { input: m.cost?.input || 0, output: m.cost?.output || 0, cacheRead: m.cost?.cache_read || 0, cacheWrite: m.cost?.cache_write || 0 },
       contextWindow: m.limit?.context || 128000,
       maxTokens: m.limit?.output || 4096,
@@ -62,24 +60,34 @@ export default function (pi: ExtensionAPI) {
         const { code, verificationUrl, expiresIn } = await (await fetch(`${KILO_API}/api/device-auth/codes`, { method: "POST", headers: { "Content-Type": "application/json" } })).json();
         callbacks.onAuth({ url: verificationUrl, instructions: `Enter code: ${code}` });
 
-        const [cmd, ...args] = process.platform === "win32" ? ["cmd", "/c", "start", "", verificationUrl] : ["xdg-open", verificationUrl];
-        execFileSync(cmd, args, { windowsHide: true });
+        try {
+          const [cmd, ...args] = process.platform === "win32" ? ["cmd", "/c", "start", "", verificationUrl] : ["xdg-open", verificationUrl];
+          execFileSync(cmd, args, { windowsHide: true });
+        } catch {
+          // Browser auto-open failed (headless env). User can open the URL manually from the instructions above.
+        }
 
         for (let i = 0; i < Math.ceil(expiresIn / 5); i++) {
           await new Promise(r => setTimeout(r, 5000));
           const poll = await fetch(`${KILO_API}/api/device-auth/codes/${code}`);
-          if (poll.status === 200) return { refresh: (await poll.json()).token, access: (await poll.json()).token, expires: Date.now() + 31536000000 };
+          if (poll.status === 200) {
+            const body = await poll.json();
+            return { refresh: body.token, access: body.token, expires: Date.now() + 31536000000 };
+          }
           if (poll.status !== 202) throw new Error(poll.status === 403 ? "Denied" : "Expired");
         }
         throw new Error("Timeout");
       },
 
-      refreshToken: (c) => c,
+      refreshToken: async (c) => c,
       getApiKey: (c) => c.access,
 
-      modifyModels(models, credentials) {
+      modifyModels(models: Model<Api>[], credentials: OAuthCredentials) {
         const kiloModels = fetchModels(credentials.access);
-        return [...models.filter(m => m.provider !== "kilo"), ...kiloModels.map(m => ({ ...m, baseUrl: `${KILO_API}/api/openrouter/v1` }))];
+        return [
+          ...models.filter(m => m.provider !== "kilo"),
+          ...kiloModels.map((m: ProviderModelConfig) => ({ ...m, provider: "kilo" as Model<Api>["provider"], baseUrl: `${KILO_API}/api/openrouter/v1` })),
+        ];
       },
     },
   });
