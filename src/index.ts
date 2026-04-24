@@ -24,20 +24,51 @@ function getToken(): string | null {
   }
 }
 
+function toNumber(value: unknown): number {
+  const n = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+  return Number.isFinite(n) ? n : 0;
+}
+
+function hasTextInput(model: any): boolean {
+  const inputs = model?.architecture?.input_modalities || model?.modalities?.input;
+  return Array.isArray(inputs) && inputs.includes("text");
+}
+
+function hasTextOutput(model: any): boolean {
+  const outputs = model?.architecture?.output_modalities || model?.modalities?.output;
+  return Array.isArray(outputs) && outputs.includes("text");
+}
+
+function supportsTools(model: any): boolean {
+  return Array.isArray(model?.supported_parameters) && model.supported_parameters.includes("tools");
+}
+
+function isFreeModel(model: any): boolean {
+  if (model?.isFree === true) return true;
+  return toNumber(model?.pricing?.prompt) === 0 && toNumber(model?.pricing?.completion) === 0;
+}
+
 function fetchModels(token: string) {
   try {
     const out = execFileSync("curl", ["-s", "-H", `Authorization: Bearer ${token}`, "-H", "Content-Type: application/json", "--max-time", "10", `${KILO_API}/api/openrouter/models`], { encoding: "utf8" });
     const data = JSON.parse(out);
-    return (data.data || []).map((m: any) => ({
-      id: m.id,
-      name: m.name,
-      api: "openai-completions" as Api,
-      reasoning: m.reasoning || false,
-      input: m.modalities?.input || ["text"],
-      cost: { input: m.cost?.input || 0, output: m.cost?.output || 0, cacheRead: m.cost?.cache_read || 0, cacheWrite: m.cost?.cache_write || 0 },
-      contextWindow: m.limit?.context || 128000,
-      maxTokens: m.limit?.output || 4096,
-    }));
+    return (data.data || [])
+      .filter((m: any) => isFreeModel(m) && hasTextInput(m) && hasTextOutput(m) && supportsTools(m))
+      .map((m: any) => ({
+        id: m.id,
+        name: m.name,
+        api: "openai-completions" as Api,
+        reasoning: m.reasoning || false,
+        input: m.architecture?.input_modalities || m.modalities?.input || ["text"],
+        cost: {
+          input: toNumber(m.pricing?.prompt ?? m.cost?.input),
+          output: toNumber(m.pricing?.completion ?? m.cost?.output),
+          cacheRead: toNumber(m.pricing?.input_cache_read ?? m.cost?.cache_read),
+          cacheWrite: toNumber(m.pricing?.input_cache_write ?? m.cost?.cache_write),
+        },
+        contextWindow: m.context_length || m.top_provider?.context_length || m.limit?.context || 128000,
+        maxTokens: m.top_provider?.max_completion_tokens || m.max_output_tokens || m.limit?.output || 4096,
+      }));
   } catch {
     return [];
   }
