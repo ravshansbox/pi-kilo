@@ -86,35 +86,51 @@ function isFreeModel(model: KiloModelResponse): boolean {
   return toNumber(model.pricing?.prompt) === 0 && toNumber(model.pricing?.completion) === 0;
 }
 
-function fetchModels(token: string) {
+function mapModels(data: { data?: KiloModelResponse[] }): ProviderModelConfig[] {
+  return (data.data || [])
+    .filter((m) => isFreeModel(m) && hasTextInput(m) && hasTextOutput(m) && supportsTools(m))
+    .map((m) => ({
+      id: m.id,
+      name: m.name || m.id,
+      api: "openai-completions" as Api,
+      reasoning: m.reasoning || false,
+      input: ["text"],
+      cost: {
+        input: toNumber(m.pricing?.prompt ?? m.cost?.input),
+        output: toNumber(m.pricing?.completion ?? m.cost?.output),
+        cacheRead: toNumber(m.pricing?.input_cache_read ?? m.cost?.cache_read),
+        cacheWrite: toNumber(m.pricing?.input_cache_write ?? m.cost?.cache_write),
+      },
+      contextWindow: m.context_length || m.top_provider?.context_length || m.limit?.context || 128000,
+      maxTokens: m.top_provider?.max_completion_tokens || m.max_output_tokens || m.limit?.output || 4096,
+    }));
+}
+
+async function fetchModels(token: string) {
   try {
-    const out = execFileSync("curl", ["-s", "-H", `Authorization: Bearer ${token}`, "-H", "Content-Type: application/json", "--max-time", "10", `${KILO_API}/api/openrouter/models`], { encoding: "utf8" });
-    const data = JSON.parse(out) as { data?: KiloModelResponse[] };
-    return (data.data || [])
-      .filter((m) => isFreeModel(m) && hasTextInput(m) && hasTextOutput(m) && supportsTools(m))
-      .map((m) => ({
-        id: m.id,
-        name: m.name || m.id,
-        api: "openai-completions" as Api,
-        reasoning: m.reasoning || false,
-        input: m.architecture?.input_modalities || m.modalities?.input || ["text"],
-        cost: {
-          input: toNumber(m.pricing?.prompt ?? m.cost?.input),
-          output: toNumber(m.pricing?.completion ?? m.cost?.output),
-          cacheRead: toNumber(m.pricing?.input_cache_read ?? m.cost?.cache_read),
-          cacheWrite: toNumber(m.pricing?.input_cache_write ?? m.cost?.cache_write),
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10_000);
+    try {
+      const response = await fetch(`${KILO_API}/api/openrouter/models`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
         },
-        contextWindow: m.context_length || m.top_provider?.context_length || m.limit?.context || 128000,
-        maxTokens: m.top_provider?.max_completion_tokens || m.max_output_tokens || m.limit?.output || 4096,
-      }));
+        signal: controller.signal,
+      });
+      if (!response.ok) return [];
+      return mapModels((await response.json()) as { data?: KiloModelResponse[] });
+    } finally {
+      clearTimeout(timeout);
+    }
   } catch {
     return [];
   }
 }
 
-export default function (pi: ExtensionAPI) {
+export default async function (pi: ExtensionAPI) {
   const token = getToken();
-  const models = token ? fetchModels(token) : [];
+  const models = token ? await fetchModels(token) : [];
 
   pi.registerProvider("kilo", {
     baseUrl: `${KILO_API}/api/openrouter/v1`,
@@ -152,11 +168,8 @@ export default function (pi: ExtensionAPI) {
       getApiKey: (c) => c.access,
 
       modifyModels(models: Model<Api>[], credentials: OAuthCredentials) {
-        const kiloModels = fetchModels(credentials.access);
-        return [
-          ...models.filter(m => m.provider !== "kilo"),
-          ...kiloModels.map((m: ProviderModelConfig) => ({ ...m, provider: "kilo" as Model<Api>["provider"], baseUrl: `${KILO_API}/api/openrouter/v1` })),
-        ];
+        void fetchModels(credentials.access).then(() => undefined);
+        return models;
       },
     },
   });
