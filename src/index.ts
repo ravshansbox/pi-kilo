@@ -24,39 +24,77 @@ function getToken(): string | null {
   }
 }
 
+type KiloModelResponse = {
+  id: string;
+  name?: string;
+  isFree?: boolean;
+  pricing?: {
+    prompt?: number | string;
+    completion?: number | string;
+    input_cache_read?: number | string;
+    input_cache_write?: number | string;
+  };
+  cost?: {
+    input?: number | string;
+    output?: number | string;
+    cache_read?: number | string;
+    cache_write?: number | string;
+  };
+  architecture?: {
+    input_modalities?: string[];
+    output_modalities?: string[];
+  };
+  modalities?: {
+    input?: string[];
+    output?: string[];
+  };
+  supported_parameters?: string[];
+  top_provider?: {
+    context_length?: number;
+    max_completion_tokens?: number;
+  };
+  context_length?: number;
+  max_output_tokens?: number;
+  limit?: {
+    context?: number;
+    output?: number;
+  };
+  reasoning?: boolean;
+};
+
 function toNumber(value: unknown): number {
   const n = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
   return Number.isFinite(n) ? n : 0;
 }
 
-function hasTextInput(model: any): boolean {
-  const inputs = model?.architecture?.input_modalities || model?.modalities?.input;
+function hasTextInput(model: KiloModelResponse): boolean {
+  const inputs = model.architecture?.input_modalities || model.modalities?.input;
   return Array.isArray(inputs) && inputs.includes("text");
 }
 
-function hasTextOutput(model: any): boolean {
-  const outputs = model?.architecture?.output_modalities || model?.modalities?.output;
+function hasTextOutput(model: KiloModelResponse): boolean {
+  const outputs = model.architecture?.output_modalities || model.modalities?.output;
   return Array.isArray(outputs) && outputs.includes("text");
 }
 
-function supportsTools(model: any): boolean {
-  return Array.isArray(model?.supported_parameters) && model.supported_parameters.includes("tools");
+function supportsTools(model: KiloModelResponse): boolean {
+  return Array.isArray(model.supported_parameters) && model.supported_parameters.includes("tools");
 }
 
-function isFreeModel(model: any): boolean {
-  if (model?.isFree === true) return true;
-  return toNumber(model?.pricing?.prompt) === 0 && toNumber(model?.pricing?.completion) === 0;
+function isFreeModel(model: KiloModelResponse): boolean {
+  if (model.isFree === true) return true;
+  return toNumber(model.pricing?.prompt) === 0 && toNumber(model.pricing?.completion) === 0;
 }
 
 function fetchModels(token: string) {
   try {
     const out = execFileSync("curl", ["-s", "-H", `Authorization: Bearer ${token}`, "-H", "Content-Type: application/json", "--max-time", "10", `${KILO_API}/api/openrouter/models`], { encoding: "utf8" });
-    const data = JSON.parse(out);
+    const data = JSON.parse(out) as { data?: KiloModelResponse[] };
     return (data.data || [])
-      .filter((m: any) => isFreeModel(m) && hasTextInput(m) && hasTextOutput(m) && supportsTools(m))
-      .map((m: any) => ({
+      .filter((m) => isFreeModel(m) && hasTextInput(m) && hasTextOutput(m) && supportsTools(m))
+      .map((m) => ({
         id: m.id,
-        name: m.name,
+        name: m.name || m.id,
         api: "openai-completions" as Api,
         reasoning: m.reasoning || false,
         input: m.architecture?.input_modalities || m.modalities?.input || ["text"],
