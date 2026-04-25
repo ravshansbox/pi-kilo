@@ -4,7 +4,7 @@
   "description": "Kilo Gateway provider extension for pi",
   "pi": {
     "extensions": [
-      "./src/index.ts"
+      "./index.ts"
     ]
   },
   "peerDependencies": {
