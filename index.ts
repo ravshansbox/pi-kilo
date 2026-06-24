@@ -128,15 +128,29 @@ async function fetchModels(token: string) {
   }
 }
 
+function openBrowser(url: string): void {
+  try {
+    if (process.platform === "win32") {
+      execFileSync("cmd", ["/c", "start", "", url], { windowsHide: true });
+    } else if (process.platform === "darwin") {
+      execFileSync("open", [url]);
+    } else {
+      execFileSync("xdg-open", [url]);
+    }
+  } catch {
+    // Browser auto-open failed (headless env). User can open the URL manually from the instructions shown in pi.
+  }
+}
+
 export default async function (pi: ExtensionAPI) {
   const token = getToken();
-  const models = token ? await fetchModels(token) : [];
+  let cachedModels = token ? await fetchModels(token) : [];
 
   pi.registerProvider("kilo", {
     baseUrl: `${KILO_API}/api/openrouter/v1`,
     api: "openai-completions",
     authHeader: true,
-    models,
+    models: cachedModels,
 
     oauth: {
       name: "Kilo Gateway",
@@ -144,13 +158,7 @@ export default async function (pi: ExtensionAPI) {
       async login(callbacks: OAuthLoginCallbacks): Promise<OAuthCredentials> {
         const { code, verificationUrl, expiresIn } = await (await fetch(`${KILO_API}/api/device-auth/codes`, { method: "POST", headers: { "Content-Type": "application/json" } })).json();
         callbacks.onAuth({ url: verificationUrl, instructions: `Enter code: ${code}` });
-
-        try {
-          const [cmd, ...args] = process.platform === "win32" ? ["cmd", "/c", "start", "", verificationUrl] : ["xdg-open", verificationUrl];
-          execFileSync(cmd, args, { windowsHide: true });
-        } catch {
-          // Browser auto-open failed (headless env). User can open the URL manually from the instructions above.
-        }
+        openBrowser(verificationUrl);
 
         for (let i = 0; i < Math.ceil(expiresIn / 5); i++) {
           await new Promise(r => setTimeout(r, 5000));
@@ -168,8 +176,12 @@ export default async function (pi: ExtensionAPI) {
       getApiKey: (c) => c.access,
 
       modifyModels(models: Model<Api>[], credentials: OAuthCredentials) {
-        void fetchModels(credentials.access).then(() => undefined);
-        return models;
+        fetchModels(credentials.access).then((fresh) => { cachedModels = fresh; }).catch(() => {});
+        return models.filter((m) => m.provider === "kilo").length > 0
+          ? models.filter((m) => m.provider !== "kilo").concat(
+              cachedModels.map((cm) => ({ ...cm, provider: "kilo" }) as Model<Api>)
+            )
+          : models;
       },
     },
   });
