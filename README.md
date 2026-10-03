@@ -18,5 +18,5 @@ After logging in, the extension refreshes the available free models from `https:
 
 ```bash
 npm install
-npm run typecheck
+npm run check
 ```
