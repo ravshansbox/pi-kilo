@@ -2,20 +2,20 @@
  * Kilo Provider Extension for Pi Agent
  */
 
-import type { Api, Model, OAuthCredentials, OAuthLoginCallbacks } from "@earendil-works/pi-ai";
-import type { ExtensionAPI, ProviderModelConfig } from "@earendil-works/pi-coding-agent";
-import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import { homedir } from "node:os";
+import type { Api, Model, OAuthCredentials, OAuthLoginCallbacks } from '@earendil-works/pi-ai';
+import type { ExtensionAPI, ProviderModelConfig } from '@earendil-works/pi-coding-agent';
+import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { homedir } from 'node:os';
 
-const KILO_API = "https://api.kilo.ai";
-const AUTH_PATH = join(homedir(), ".pi", "agent", "auth.json");
+const KILO_API = 'https://api.kilo.ai';
+const AUTH_PATH = join(homedir(), '.pi', 'agent', 'auth.json');
 
 function getToken(): string | null {
   try {
-    const auth = JSON.parse(readFileSync(AUTH_PATH, "utf8"));
-    const kilo = auth["kilo"];
+    const auth = JSON.parse(readFileSync(AUTH_PATH, 'utf8'));
+    const kilo = auth['kilo'];
     if (!kilo?.access) return null;
     if (kilo.expires && Date.now() > kilo.expires) return null;
     return kilo.access;
@@ -63,22 +63,22 @@ type KiloModelResponse = {
 };
 
 function toNumber(value: unknown): number {
-  const n = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+  const n = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN;
   return Number.isFinite(n) ? n : 0;
 }
 
 function hasTextInput(model: KiloModelResponse): boolean {
   const inputs = model.architecture?.input_modalities || model.modalities?.input;
-  return Array.isArray(inputs) && inputs.includes("text");
+  return Array.isArray(inputs) && inputs.includes('text');
 }
 
 function hasTextOutput(model: KiloModelResponse): boolean {
   const outputs = model.architecture?.output_modalities || model.modalities?.output;
-  return Array.isArray(outputs) && outputs.includes("text");
+  return Array.isArray(outputs) && outputs.includes('text');
 }
 
 function supportsTools(model: KiloModelResponse): boolean {
-  return Array.isArray(model.supported_parameters) && model.supported_parameters.includes("tools");
+  return Array.isArray(model.supported_parameters) && model.supported_parameters.includes('tools');
 }
 
 function isFreeModel(model: KiloModelResponse): boolean {
@@ -92,17 +92,19 @@ function mapModels(data: { data?: KiloModelResponse[] }): ProviderModelConfig[] 
     .map((m) => ({
       id: m.id,
       name: m.name || m.id,
-      api: "openai-completions" as Api,
+      api: 'openai-completions' as Api,
       reasoning: m.reasoning || false,
-      input: ["text"],
+      input: ['text'],
       cost: {
         input: toNumber(m.pricing?.prompt ?? m.cost?.input),
         output: toNumber(m.pricing?.completion ?? m.cost?.output),
         cacheRead: toNumber(m.pricing?.input_cache_read ?? m.cost?.cache_read),
         cacheWrite: toNumber(m.pricing?.input_cache_write ?? m.cost?.cache_write),
       },
-      contextWindow: m.context_length || m.top_provider?.context_length || m.limit?.context || 128000,
-      maxTokens: m.top_provider?.max_completion_tokens || m.max_output_tokens || m.limit?.output || 4096,
+      contextWindow:
+        m.context_length || m.top_provider?.context_length || m.limit?.context || 128000,
+      maxTokens:
+        m.top_provider?.max_completion_tokens || m.max_output_tokens || m.limit?.output || 4096,
     }));
 }
 
@@ -114,7 +116,7 @@ async function fetchModels(token: string) {
       const response = await fetch(`${KILO_API}/api/openrouter/models`, {
         headers: {
           Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
         },
         signal: controller.signal,
       });
@@ -130,12 +132,12 @@ async function fetchModels(token: string) {
 
 function openBrowser(url: string): void {
   try {
-    if (process.platform === "win32") {
-      execFileSync("cmd", ["/c", "start", "", url], { windowsHide: true });
-    } else if (process.platform === "darwin") {
-      execFileSync("open", [url]);
+    if (process.platform === 'win32') {
+      execFileSync('cmd', ['/c', 'start', '', url], { windowsHide: true });
+    } else if (process.platform === 'darwin') {
+      execFileSync('open', [url]);
     } else {
-      execFileSync("xdg-open", [url]);
+      execFileSync('xdg-open', [url]);
     }
   } catch {
     // Browser auto-open failed (headless env). User can open the URL manually from the instructions shown in pi.
@@ -146,41 +148,50 @@ export default async function (pi: ExtensionAPI) {
   const token = getToken();
   let cachedModels = token ? await fetchModels(token) : [];
 
-  pi.registerProvider("kilo", {
+  pi.registerProvider('kilo', {
     baseUrl: `${KILO_API}/api/openrouter/v1`,
-    api: "openai-completions",
+    api: 'openai-completions',
     authHeader: true,
     models: cachedModels,
 
     oauth: {
-      name: "Kilo Gateway",
+      name: 'Kilo Gateway',
 
       async login(callbacks: OAuthLoginCallbacks): Promise<OAuthCredentials> {
-        const { code, verificationUrl, expiresIn } = await (await fetch(`${KILO_API}/api/device-auth/codes`, { method: "POST", headers: { "Content-Type": "application/json" } })).json();
+        const { code, verificationUrl, expiresIn } = await (
+          await fetch(`${KILO_API}/api/device-auth/codes`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+          })
+        ).json();
         callbacks.onAuth({ url: verificationUrl, instructions: `Enter code: ${code}` });
         openBrowser(verificationUrl);
 
         for (let i = 0; i < Math.ceil(expiresIn / 5); i++) {
-          await new Promise(r => setTimeout(r, 5000));
+          await new Promise((r) => setTimeout(r, 5000));
           const poll = await fetch(`${KILO_API}/api/device-auth/codes/${code}`);
           if (poll.status === 200) {
             const body = await poll.json();
             return { refresh: body.token, access: body.token, expires: Date.now() + 31536000000 };
           }
-          if (poll.status !== 202) throw new Error(poll.status === 403 ? "Denied" : "Expired");
+          if (poll.status !== 202) throw new Error(poll.status === 403 ? 'Denied' : 'Expired');
         }
-        throw new Error("Timeout");
+        throw new Error('Timeout');
       },
 
       refreshToken: async (c) => c,
       getApiKey: (c) => c.access,
 
       modifyModels(models: Model<Api>[], credentials: OAuthCredentials) {
-        fetchModels(credentials.access).then((fresh) => { cachedModels = fresh; }).catch(() => {});
-        return models.filter((m) => m.provider === "kilo").length > 0
-          ? models.filter((m) => m.provider !== "kilo").concat(
-              cachedModels.map((cm) => ({ ...cm, provider: "kilo" }) as Model<Api>)
-            )
+        fetchModels(credentials.access)
+          .then((fresh) => {
+            cachedModels = fresh;
+          })
+          .catch(() => {});
+        return models.filter((m) => m.provider === 'kilo').length > 0
+          ? models
+              .filter((m) => m.provider !== 'kilo')
+              .concat(cachedModels.map((cm) => ({ ...cm, provider: 'kilo' }) as Model<Api>))
           : models;
       },
     },
