@@ -4,10 +4,8 @@ Kilo Gateway provider extension for pi.
 
 ## Install
 
-```json
-{
-  "extensions": ["github:ravshansbox/pi-kilo"]
-}
+```bash
+pi install git:github.com/ravshansbox/pi-kilo
 ```
 
 ## Usage
