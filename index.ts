@@ -1,7 +1,3 @@
-/**
- * Kilo Provider Extension for Pi Agent
- */
-
 import type { Api, Model, OAuthCredentials, OAuthLoginCallbacks } from '@earendil-works/pi-ai';
 import {
   getAgentDir,
