@@ -8,6 +8,8 @@ Kilo Gateway provider extension for pi.
 pi install npm:@ravshansbox/pi-kilo
 ```
 
+Add `-l` to install it in project settings.
+
 ## Usage
 
 Pi loads the provider from `./index.ts` and registers a `kilo` provider that signs in through the Kilo device-auth flow and fetches free text-capable tool-calling models.
