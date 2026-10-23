@@ -3,14 +3,17 @@
  */
 
 import type { Api, Model, OAuthCredentials, OAuthLoginCallbacks } from '@earendil-works/pi-ai';
-import type { ExtensionAPI, ProviderModelConfig } from '@earendil-works/pi-coding-agent';
+import {
+  getAgentDir,
+  type ExtensionAPI,
+  type ProviderModelConfig,
+} from '@earendil-works/pi-coding-agent';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { homedir } from 'node:os';
 
 const KILO_API = 'https://api.kilo.ai';
-const AUTH_PATH = join(homedir(), '.pi', 'agent', 'auth.json');
+const AUTH_PATH = join(getAgentDir(), 'auth.json');
 
 function getToken(): string | null {
   try {
