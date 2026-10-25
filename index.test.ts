@@ -39,3 +39,14 @@ test('refreshed models keep the Kilo base URL', async () => {
   assert.ok(models.length > 0);
   for (const model of models) assert.equal(model.baseUrl, config.baseUrl);
 });
+
+test('exposes models after first login', async () => {
+  const config = await load({});
+  config.oauth.modifyModels([], credentials);
+  await new Promise((r) => setTimeout(r, 10));
+  const models = config.oauth.modifyModels([], credentials);
+  assert.deepEqual(
+    models.map((m: { id: string }) => m.id),
+    ['free/model'],
+  );
+});

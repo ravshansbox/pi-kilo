@@ -187,20 +187,18 @@ export default async function (pi: ExtensionAPI) {
             cachedModels = fresh;
           })
           .catch(() => {});
-        return models.filter((m) => m.provider === 'kilo').length > 0
-          ? models
-              .filter((m) => m.provider !== 'kilo')
-              .concat(
-                cachedModels.map(
-                  (cm) =>
-                    ({
-                      ...cm,
-                      provider: 'kilo',
-                      baseUrl: `${KILO_API}/api/openrouter/v1`,
-                    }) as Model<Api>,
-                ),
-              )
-          : models;
+        return models
+          .filter((m) => m.provider !== 'kilo')
+          .concat(
+            cachedModels.map(
+              (cm) =>
+                ({
+                  ...cm,
+                  provider: 'kilo',
+                  baseUrl: `${KILO_API}/api/openrouter/v1`,
+                }) as Model<Api>,
+            ),
+          );
       },
     },
   });
