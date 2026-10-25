@@ -190,7 +190,16 @@ export default async function (pi: ExtensionAPI) {
         return models.filter((m) => m.provider === 'kilo').length > 0
           ? models
               .filter((m) => m.provider !== 'kilo')
-              .concat(cachedModels.map((cm) => ({ ...cm, provider: 'kilo' }) as Model<Api>))
+              .concat(
+                cachedModels.map(
+                  (cm) =>
+                    ({
+                      ...cm,
+                      provider: 'kilo',
+                      baseUrl: `${KILO_API}/api/openrouter/v1`,
+                    }) as Model<Api>,
+                ),
+              )
           : models;
       },
     },
