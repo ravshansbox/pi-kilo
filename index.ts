@@ -7,6 +7,7 @@ import {
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { setTimeout as sleep } from 'node:timers/promises';
 
 const KILO_API = 'https://api.kilo.ai';
 const AUTH_PATH = join(getAgentDir(), 'auth.json');
@@ -167,7 +168,7 @@ export default async function (pi: ExtensionAPI) {
         openBrowser(verificationUrl);
 
         for (let i = 0; i < Math.ceil(expiresIn / 5); i++) {
-          await new Promise((r) => setTimeout(r, 5000));
+          await sleep(5000, undefined, { signal: callbacks.signal });
           const poll = await fetch(`${KILO_API}/api/device-auth/codes/${code}`);
           if (poll.status === 200) {
             const body = await poll.json();

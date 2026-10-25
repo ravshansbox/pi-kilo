@@ -50,3 +50,32 @@ test('exposes models after first login', async () => {
     ['free/model'],
   );
 });
+
+test('stops login when cancelled', async () => {
+  const config = await load({});
+  const originalFetch = globalThis.fetch;
+  const originalPath = process.env['PATH'];
+  process.env['PATH'] = '';
+  globalThis.fetch = async (input) =>
+    String(input).endsWith('/codes')
+      ? new Response(JSON.stringify({ code: 'c', verificationUrl: 'u', expiresIn: 600 }))
+      : new Response(null, { status: 202 });
+  const controller = new AbortController();
+  try {
+    const login = config.oauth.login({
+      onAuth: () => controller.abort(),
+      signal: controller.signal,
+    });
+    const result = await Promise.race([
+      login.then(
+        () => 'resolved',
+        () => 'rejected',
+      ),
+      new Promise((r) => setTimeout(() => r('pending'), 100)),
+    ]);
+    assert.equal(result, 'rejected');
+  } finally {
+    globalThis.fetch = originalFetch;
+    process.env['PATH'] = originalPath;
+  }
+});
