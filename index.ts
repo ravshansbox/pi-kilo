@@ -158,12 +158,12 @@ export default async function (pi: ExtensionAPI) {
       name: 'Kilo Gateway',
 
       async login(callbacks: OAuthLoginCallbacks): Promise<OAuthCredentials> {
-        const { code, verificationUrl, expiresIn } = await (
-          await fetch(`${KILO_API}/api/device-auth/codes`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-          })
-        ).json();
+        const codes = await fetch(`${KILO_API}/api/device-auth/codes`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        });
+        if (!codes.ok) throw new Error(`Device code request failed: ${codes.status}`);
+        const { code, verificationUrl, expiresIn } = await codes.json();
         callbacks.onAuth({ url: verificationUrl, instructions: `Enter code: ${code}` });
         openBrowser(verificationUrl);
 

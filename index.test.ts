@@ -79,3 +79,16 @@ test('stops login when cancelled', async () => {
     process.env['PATH'] = originalPath;
   }
 });
+
+test('reports a failed device code request', async () => {
+  const config = await load({});
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response('busy', { status: 503 });
+  let opened = false;
+  try {
+    await assert.rejects(config.oauth.login({ onAuth: () => (opened = true) }), /503/);
+    assert.equal(opened, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
